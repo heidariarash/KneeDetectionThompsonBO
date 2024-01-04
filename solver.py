@@ -77,17 +77,16 @@ def solver(problem: str, method: str, **kwargs):
             ref1 = 5.5
             
     elif problem == "ZDT3":
-        num_obj   = 2
-        problem   = zdt3
-        observer  = trieste.objectives.utils.mk_observer(problem)
-        hv_best   = np.array([0.99841826, 1.001583  ])
-        dl_best   = np.array([2.91496276, 3.07755593])
-        ref0      = 0.85182557
-        ref1      = 1.0
-        slope     = -1
-        intercept = 4
-        mins      = [0] * Setting.n_var
-        maxs      = [1] * Setting.n_var
+        num_obj      = 2
+        problem      = zdt3
+        observer     = trieste.objectives.utils.mk_observer(problem)
+        ground_truth = 0.6691915226908384
+        ref0         = 0.85182557
+        ref1         = 1.0
+        slope        = -1
+        intercept    = 4
+        mins         = [0] * Setting.n_var
+        maxs         = [1] * Setting.n_var
     
     elif problem == "DEB3DK":
         num_obj  = 3
@@ -158,8 +157,6 @@ def solver(problem: str, method: str, **kwargs):
         ruleb = trieste.acquisition.rule.EfficientGlobalOptimization(builder=acqb)
 
     reps = kwargs["reps"]
-    if method == "hv-knee":
-        reps = int(reps/2)
 
     if Setting.knees == 1 and num_obj == 2:
         regrets_hv.append(calculate_regret_hv(ref0, ref1, hv_best, dataset, ref2))
@@ -172,7 +169,13 @@ def solver(problem: str, method: str, **kwargs):
     i = 0
     while i < reps:
         try:
-            result  = bo.optimize(1, dataset, model, acquisition_rule = rule)
+            if method == "hv-knee":
+                if i % 2 == 0:
+                    result  = bo.optimize(1, dataset, model, acquisition_rule = rule)
+                else:
+                    result  = bo.optimize(1, dataset, model, acquisition_rule = ruleb)
+            else:
+                result  = bo.optimize(1, dataset, model, acquisition_rule = rule)
             dataset = result.try_get_final_dataset()
             if Setting.knees == 1 and num_obj == 2:
                 regrets_hv.append(calculate_regret_hv(ref0, ref1, hv_best, dataset, ref2))
@@ -184,16 +187,5 @@ def solver(problem: str, method: str, **kwargs):
             i += 1
         except:
             model   = build_stacked_independent_objectives_model(dataset, num_obj, search_space)
-        
-        if method == "hv-knee":
-            result  = bo.optimize(1, dataset, model, acquisition_rule = ruleb)
-            dataset = result.try_get_final_dataset()
-            if Setting.knees == 1 and num_obj == 2:
-                regrets_hv.append(calculate_regret_hv(ref0, ref1, hv_best, dataset, ref2))
-                regrets_d2l.append(calculate_regret_d2l(slope, intercept, dl_best, dataset))
-            elif num_obj == 3:
-                regrets_hv.append(calculate_regret_hv(ref0, ref1, hv_best, dataset, ref2))
-            else:
-                regrets_hv.append(calculate_regret_hv_multiple(ref0, ref1, dataset, ground_truth))
 
     return regrets_d2l, regrets_hv, model, dataset
